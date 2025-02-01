@@ -3,6 +3,7 @@
 import { db } from "@/app/api/inngest/prisma"
 import { auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
+import { generateAIInsights } from "./dashboard"
 
 // Define a type for the expected data format when updating the user
 type UserUpdateData = {
@@ -36,16 +37,12 @@ export async function updateUser(data: UserUpdateData) {
 
         // If industry doesn't exist, create it with default values
         if (!industryInsight) {
-          industryInsight = await tx.industryInsight.create({
+          const insights = await generateAIInsights(data.industry)
+
+          industryInsight = await db.industryInsight.create({
             data: {
               industry: data.industry,
-              salaryRanges: [],
-              growthRate: 0,
-              demandLevel: "MEDIUM",
-              topSkills: [],
-              marketOutlook: "NEUTRAL",
-              keyTrends: [],
-              recommendedSkills: [],
+              ...insights,
               nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
             },
           })
@@ -67,13 +64,12 @@ export async function updateUser(data: UserUpdateData) {
         return { updatedUser, industryInsight }
       },
       {
-        timeout: 10000, // Default timeout (10 seconds)
+        timeout: 50000, // default: 5000
       }
     )
 
-    // Revalidate the path after updating the user
     revalidatePath("/")
-    return { success: true, ...result } // Return the updated user
+    return { ...result }
   } catch (error: any) {
     console.error("Error updating user and industry:", error.message)
     throw new Error("Failed to update profile")
